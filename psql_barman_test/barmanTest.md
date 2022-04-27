@@ -1,23 +1,47 @@
 # Test Connection to Psql
 
 ##### Replace All IP Addresses in Document
+```
 Current Test:
 - db_name: pg_vssh
-- db_ip: 172.29.112.36
-- bms: 172.29.123.90
+- db_ip: 172.24.130.192
+- bms: 172.24.139.61
+```
 
 ```
 sudo su - barman
-psql -c 'SELECT version()' -U barman -d postgres -h 172.29.112.36 -p 5432
+psql -c 'SELECT version()' -U barman -d postgres -h 172.24.130.192 -p 5432
 ```
 
 ##### Test Barman
 ```
 barman check pg_vssh
+
+barman receive-wal --drop-slot pg_vssh
+barman receive-wal --create-slot pg_vssh
+barman receive-wal --reset pg_vssh
 barman switch-wal --force --archive pg_vssh
+
+# barman switch-wal --force --archive pg_vssh
+# barman switch-wal --archive --archive-timeout 20 pg_vssh
+barman switch-wal --archive pg_vssh
 barman check pg_vssh
 barman replication-status pg_vssh
+barman show-server pg_vssh
 barman list-server
+barman list-backup all
+
+ls -ltr /var/lib/barman/*/incoming
+ls -ltr /var/lib/barman/*/errors
+ls -ltr /var/lib/barman/*/identity.json
+ls -ltr /var/lib/barman/*/base
+ls -ltr /var/lib/barman/*/streaming
+ls -ltr /var/lib/barman/*/wals
+
+ls -ltr /var/lib/barman/*/incoming
+ls -ltr /var/lib/barman/*/streaming
+ls -ltr /var/lib/barman/*/wals
+
 
 # barman backup pg_vssh --wait
 
@@ -26,50 +50,96 @@ tail -100 /var/log/barman/barman.log
 
 
 # Backup & Recovery Demo
-##### Add Table T1 to Psql & Run Backup Barman
+##### Add Table testtablev? to Psql & Run Backup Barman
 ```
 # run on postresql vm
-create table T1 ( id1 int , id2 int );
-insert into  T1 values (3,2);
+DROP TABLE testtablev2;
+CREATE TABLE testtablev4 ( name varchar, age int, joindate varchar );
+INSERT INTO testtablev4 (name, age, joindate)
+SELECT substr(md5(random()::text), 1, 10),
+       (random() * 70 + 10)::integer,
+       DATE '2018-01-01' + (random() * 700)::integer
+FROM generate_series(1, 1000);
+SELECT * FROM testtablev4 LIMIT 10;
 \d
 
 # run on barman vm
 barman backup pg_vssh --wait
-```
 
-##### Add Table T2 to Psql & Run Backup Barman
-```
+ls -ltr /var/lib/barman/pg_vssh/incoming 
+ls -ltr /var/lib/barman/pg_vssh/base
+ls -ltr /var/lib/barman/pg_vssh/streaming
+ls -ltr /var/lib/barman/pg_vssh/wals
+
+rm -rf /var/lib/barman/pg_vssh/incoming/*
+rm -rf /var/lib/barman/pg_vssh/base/*
+rm -rf /var/lib/barman/pg_vssh/streaming/*
+rm -rf /var/lib/barman/pg_vssh/wals/*
+
+
+# Scenario
+# Time T1: pg_vssh 20220426T120313 - Tue Apr 26 12:03:16 2022
 # run on postresql vm
-create table T2 ( id1 int , id2 int );
-insert into  T2 values (2,2);
+CREATE TABLE testtablev1 ( name varchar, age int, joindate varchar );
+INSERT INTO testtablev1 (name, age, joindate)
+SELECT substr(md5(random()::text), 1, 10),
+       (random() * 70 + 10)::integer,
+       DATE '2018-01-01' + (random() * 700)::integer
+FROM generate_series(1, 1000);
+SELECT * FROM testtablev1 LIMIT 10;
 \d
 
 # run on barman vm
 barman backup pg_vssh --wait
-```
 
-##### Add Table T3 to Psql & Drop T1 from Psql & Run Backup Barman
-```
-# run on postresql vm
-drop table T1;
-create table T3 ( id1 int , id2 int );
-insert into  T3 values (3,2);
+# Time T2
+CREATE TABLE testtablev2 ( name varchar, age int, joindate varchar );
+INSERT INTO testtablev2 (name, age, joindate)
+SELECT substr(md5(random()::text), 1, 10),
+       (random() * 70 + 10)::integer,
+       DATE '2018-01-01' + (random() * 700)::integer
+FROM generate_series(1, 1000);
+SELECT * FROM testtablev2 LIMIT 10;
+\d
+
+# Time T3
+DROP TABLE testtablev1;
+CREATE TABLE testtablev3 ( name varchar, age int, joindate varchar );
+INSERT INTO testtablev3 (name, age, joindate)
+SELECT substr(md5(random()::text), 1, 10),
+       (random() * 70 + 10)::integer,
+       DATE '2018-01-01' + (random() * 700)::integer
+FROM generate_series(1, 1000);
+SELECT * FROM testtablev3 LIMIT 10;
 \d
 
 # run on barman vm
 barman backup pg_vssh --wait
-```
 
-##### Add Table T4 to Psql & Drop T2 from Psql & Run Backup Barman
-```
-# run on postresql vm
-drop table T2;
-create table T4 ( id1 int , id2 int );
-insert into  T4 values (4,2);
+# Time T4
+CREATE TABLE testtable4 ( name varchar, age int, joindate varchar );
+INSERT INTO testtable4 (name, age, joindate)
+SELECT substr(md5(random()::text), 1, 10),
+       (random() * 70 + 10)::integer,
+       DATE '2018-01-01' + (random() * 700)::integer
+FROM generate_series(1, 1000);
+SELECT * FROM testtable4 LIMIT 10;
+\d
+
+# Time T5
+DROP TABLE testtablev2;
+CREATE TABLE testtable5 ( name varchar, age int, joindate varchar );
+INSERT INTO testtable5 (name, age, joindate)
+SELECT substr(md5(random()::text), 1, 10),
+       (random() * 70 + 10)::integer,
+       DATE '2018-01-01' + (random() * 700)::integer
+FROM generate_series(1, 1000);
+SELECT * FROM testtable5 LIMIT 10;
 \d
 
 # run on barman vm
 barman backup pg_vssh --wait
+
 ```
 
 ##### Now we Have 4 Backup
@@ -81,34 +151,42 @@ pg_vssh 20220420T123816 - Wed Apr 20 08:56:02 2022 - Size: 23.5 MiB - WAL Size: 
 pg_vssh 20220420T123805 - Wed Apr 20 08:55:48 2022 - Size: 23.5 MiB - WAL Size: 50.2 KiB 
 pg_vssh 20220420T102904 - Wed Apr 20 08:55:41 2022 - Size: 23.5 MiB - WAL Size: 51.1 KiB 
 
-# pg_vssh 20220420T102951 Contains T3 & T4
-# pg_vssh 20220420T123816 Contains T2 & T3
-# pg_vssh 20220420T123805 Contains T1 & T2
-# pg_vssh 20220420T102904 Contains T1
+# pg_vssh 20220420T102951 Contains v3 & v4
+# pg_vssh 20220420T123816 Contains v2 & v3
+# pg_vssh 20220420T123805 Contains v1 & v2
+# pg_vssh 20220420T102904 Contains v1
 ```
 
-##### Backup to Local/Remote Disk
+##### Test Point-in-time recovery from Barman (PITR)
 ```
-# 
-# Backup to barman vm
-#
-# run on barman vm
-ls -l /backup_test/backup_data
-barman recover pg_vssh 20220420T123816 /backup_test/backup_data
-ls -l /backup_test/backup_data
-rm -rf /backup_test/backup_data/*
+# Connect to pg_vssh and shut down the database cluster
+ssh postgres@172.24.130.192 /usr/lib/postgresql/12/bin/pg_ctl \
+    --pgdata=/etc/postgresql/12/main stop
 
-# 
-# Backup to postresql vm
-#
-# run on postresql vm
-\q
-ls -l /backup_test/backup_data
-# run on barman vm
-barman recover --remote-ssh-command "ssh postgres@172.29.112.36" pg_vssh 20220420T123816 /backup_test/backup_data
-# run on postresql vm
-ls -l /backup_test/backup_data
-rm -rf /backup_test/backup_data/*
+# Back up the corrupt data directory, just in case something goes wrong. 
+# Then delete the corrupt data.
+ssh postgres@172.24.130.192 "rm -rf /var/lib/postgresql/12/remote_backup/* \
+    && cp -a /var/lib/postgresql/12/main \
+    /var/lib/postgresql/12/remote_backup \
+    && rm -rf /var/lib/postgresql/12/main/*"
+
+# Use Barman's recover command to connect to pg_vssh and restore the latest backup
+barman recover --remote-ssh-command 'ssh postgres@172.24.130.192' \
+        pg_vssh latest \
+        /var/lib/postgresql/12/main
+
+# Restart the server:
+ssh postgres@172.24.130.192 "/usr/lib/postgresql/12/bin/pg_ctl \
+    --pgdata=/etc/postgresql/12/main \
+    -l /var/log/postgresql/postgresql-12-main.log \
+    start \
+    ; tail /var/log/postgresql/postgresql-12-main.log"
+
+# Recover from Old Data
+ssh postgres@172.24.130.192 "rm -rf /var/lib/postgresql/main/* \
+    && cp -a /var/lib/postgresql/12/remote_backup \
+    /var/lib/postgresql/main \
+    && rm -rf /var/lib/postgresql/12/remote_backup/*"
 ```
 
 ##### Test Point-in-time recovery (PITR)
@@ -125,16 +203,16 @@ ls -ltr /var/lib/postgresql/12
 # start recover
 #
 barman list-backup pg_vssh
-barman show-backup pg_vssh 20220422T130738 | grep "End time"
-# barman recover --remote-ssh-command "ssh postgres@172.29.112.36" \
-#    pg_vssh 20220420T163006 /var/lib/postgresql/12/main
-# barman recover --remote-ssh-command "ssh postgres@172.29.112.36" \
-#    pg_vssh 20220420T163006 /var/lib/postgresql/12/main \
-#    --target-time='2022-04-20 12:38:10.067043+03:00'
-barman recover --remote-ssh-command "ssh postgres@172.29.112.36" \
-    pg_vssh 20220422T130738 /var/lib/postgresql/12/main \
-    --target-time='2022-04-22 13:07:43.677020+03:00'
-
+barman show-backup pg_vssh 20220426T104119 | grep "End time"
+barman recover --remote-ssh-command "ssh postgres@172.24.130.192" \
+    pg_vssh latest /var/lib/postgresql/12/main
+barman recover --remote-ssh-command "ssh postgres@172.24.130.192" \
+    --get-wal \
+    pg_vssh latest /var/lib/postgresql/12/main
+barman recover --remote-ssh-command "ssh postgres@172.24.130.192" \
+    pg_vssh 20220426T104119 /var/lib/postgresql/12/main \
+    --target-time='2022-04-26 10:41:25.783844+03:00'
+    
 # run on postresql vm
 # start postresql
 ls -ltr /var/lib/postgresql/12/main
@@ -149,6 +227,29 @@ barman list-server
 tail -100 /var/log/barman/barman.log
 ```
 
+##### Backup to Local/Remote Disk
+```
+## 
+## Backup to barman vm
+##
+## run on barman vm
+#ls -l /backup_test/backup_data
+#barman recover pg_vssh 20220420T123816 /backup_test/backup_data
+#ls -l /backup_test/backup_data
+#rm -rf /backup_test/backup_data/*
+## 
+## Backup to postresql vm
+##
+## run on postresql vm
+#\q
+#ls -l /backup_test/backup_data
+## run on barman vm
+#barman recover --remote-ssh-command "ssh postgres@172.24.130.192" pg_vssh 20220420T123816 /backup_test/backup_data
+## run on postresql vm
+#ls -l /backup_test/backup_data
+#rm -rf /backup_test/backup_data/*
+```
+
 ##### Automatizing Backups
 ```
 sudo su - barman
@@ -156,7 +257,10 @@ crontab -e
 15 * * * * /usr/bin/barman backup pg_vssh
 crontab -l
 ```
+
+```
 barman list-backup pg_vssh
+```
 
 # Related Commands
 ```
@@ -175,14 +279,15 @@ barman show-server pg_vssh
 tail -100 /var/log/barman/barman.log
 
 barman cron
-# barman receive-wal pg_vssh
-barman switch-wal --force --archive pg_vssh
 
+# barman receive-wal pg_vssh
 barman receive-wal --drop-slot pg_vssh
 barman receive-wal --create-slot pg_vssh
 barman receive-wal --reset pg_vssh
-rm -rf /var/lib/barman/*
+barman switch-wal --force --archive pg_vssh
 
+
+rm -rf /var/lib/barman/*
 barman receive-wal --stop pg_vssh
 ```
 
@@ -200,43 +305,32 @@ barman receive-wal --stop pg_vssh
 # pg_vssh: pg_receivewal: error: disconnected
 # ERROR: ArchiverFailure:pg_receivexlog terminated with error code: 1
 
-# sudo vi /etc/barman.d/pg_vssh.conf İÇERİSİNDE
-# path_prefix = "/usr/pgsql-12/bin"
-sudo su - barman
-export PATH=$PATH:/usr/pgsql-12/bin; barman cron >/dev/null 2>&1
+barman receive-wal --drop-slot pg_vssh
+barman receive-wal --create-slot pg_vssh
 
-# POSTGRESQL DB DURDUR/BASLAT
-\q
-exit
-# sudo systemctl stop postgresql
-# sudo systemctl start postgresql
-sudo systemctl restart postgresql
-sudo su - postgres
-psql
-\d
-
-# wal_level=replica
-# archive_command=(disabled)(?)
-# archive_mode=off(?)
-# max_wal_sender=2(?)
-# max_replication_slots=2(?)
-select name,setting from pg_settings where name like 'wal_level%';
-select name,setting from pg_settings where name like 'archive%';
-select name,setting from pg_settings where name like 'max_wal_sender%';
-select name,setting from pg_settings where name like 'max_replication_slots%';
 ```
 
 # psql db
+```
 vi /etc/postgresql/12/main/pg_hba.conf
+```
 # barman
+```
 vi /etc/barman.conf
 vi /etc/barman.d/pg_vssh.conf
+```
 
 ##### Links & Courses
 ```
+# Binary Replication Tools Comparison
+https://wiki.postgresql.org/wiki/Binary_Replication_Tools
+
 # BARMAN | PostgreSQL Backup & Restore | Streaming Backup | Part -1
 https://www.youtube.com/watch?v=hburMB0Op3A&t=52s
 
 # PostgreSQL Backup & Restore Using Barman | vssh/SSH Backup | Part -2
 https://www.youtube.com/watch?v=OOZOzRY9bxk
+
+# Single Server Streaming Example
+https://www.enterprisedb.com/docs/supported-open-source/barman/single-server-streaming/step01-db-setup/
 ```
